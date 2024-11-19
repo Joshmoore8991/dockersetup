@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# Exit script on error
+set -e
+
+# Define the installation directory and Docker network
+INSTALL_DIR="$HOME/opencti"
+DOCKER_NETWORK="opencti_network"
+
+# Stop and remove all containers
+echo "Stopping and removing OpenCTI containers..."
+cd "$INSTALL_DIR/docker" || { echo "Installation directory not found!"; exit 1; }
+docker-compose down --volumes
+
+# Remove the custom Docker network
+echo "Removing Docker network ($DOCKER_NETWORK)..."
+docker network rm "$DOCKER_NETWORK" || echo "Network $DOCKER_NETWORK not found, skipping."
+
+# Remove the installation directory
+echo "Removing installation directory ($INSTALL_DIR)..."
+rm -rf "$INSTALL_DIR"
+
+# Remove any environment variables from /etc/environment
+echo "Cleaning up environment variables..."
+sudo sed -i '/OPENCTI_/d' /etc/environment
+sudo sed -i '/MINIO_/d' /etc/environment
+sudo sed -i '/RABBITMQ_/d' /etc/environment
+sudo sed -i '/CONNECTOR_/d' /etc/environment
+sudo sed -i '/SMTP_HOSTNAME/d' /etc/environment
+
+# Reload environment variables
+echo "Reloading environment variables..."
+source /etc/environment
+
+# Optional: Remove Docker images, volumes, and prune system
+read -p "Do you want to remove all Docker images, volumes, and prune the system? (y/n): " confirm
+if [[ "$confirm" == [yY] ]]; then
+  echo "Removing all Docker images and volumes..."
+  docker system prune -a --volumes -f
+fi
+
+echo "OpenCTI uninstallation completed successfully!"
