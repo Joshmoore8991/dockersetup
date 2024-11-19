@@ -39,6 +39,17 @@ SMTP_HOSTNAME=localhost
 EOF
 ) > .env
 
+# Ensure docker-compose.yml uses the default network for localhost
+echo "Ensuring docker-compose.yml uses the default network for localhost..."
+sed -i '/services:/a\
+  opencti:\
+    networks:\
+      - default' docker-compose.yml
+
+# Remove custom network configuration
+echo "Removing custom Docker network configuration..."
+sed -i '/networks:/,+2d' docker-compose.yml
+
 # Configure ElasticSearch system parameter
 echo "Configuring system parameters for ElasticSearch..."
 sudo sysctl -w vm.max_map_count=1048575
@@ -50,14 +61,38 @@ fi
 echo "Starting Docker service..."
 sudo systemctl start docker.service
 
-# Run Docker Compose
+# Run Docker Compose and wait for services to stabilize
 echo "Starting OpenCTI containers..."
 docker-compose up -d
 
-# For Docker Swarm (optional)
-echo "Setting up Docker Swarm (optional)..."
-docker swarm init || true
-sudo bash -c 'cat .env >> /etc/environment'
-sudo docker stack deploy --compose-file docker-compose.yml opencti
+# Health check function
+check_health() {
+  echo "Waiting for services to become healthy..."
+  local retries=10
+  local healthy=0
 
-echo "OpenCTI setup completed successfully!"
+  for ((i=1; i<=retries; i++)); do
+    unhealthy_count=$(docker ps --filter "health=unhealthy" --filter "name=opencti" --format "{{.ID}}" | wc -l)
+    healthy_count=$(docker ps --filter "health=healthy" --filter "name=opencti" --format "{{.ID}}" | wc -l)
+
+    if [[ $healthy_count -ge 1 && $unhealthy_count -eq 0 ]]; then
+      echo "All services are healthy!"
+      healthy=1
+      break
+    else
+      echo "Attempt $i/$retries: Some services are still unhealthy. Retrying in 15 seconds..."
+      sleep 15
+    fi
+  done
+
+  if [[ $healthy -eq 0 ]]; then
+    echo "Services failed to reach healthy state. Check container logs."
+    docker-compose logs opencti
+    exit 1
+  fi
+}
+
+# Run health checks
+check_health
+
+echo "OpenCTI setup completed successfully with IP localhost:8080!"
