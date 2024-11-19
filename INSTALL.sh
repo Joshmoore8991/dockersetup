@@ -9,7 +9,7 @@ INSTALL_DIR="$HOME/opencti"
 # Function to check and start Docker service
 ensure_docker_running() {
   echo "Checking Docker installation..."
-  
+
   # Check if Docker is installed
   if ! command -v docker >/dev/null 2>&1; then
     echo "Docker is not installed. Installing Docker..."
