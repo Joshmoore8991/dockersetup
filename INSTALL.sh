@@ -11,11 +11,26 @@ echo "Installing dependencies..."
 sudo apt update
 sudo apt install -y git jq docker.io docker-compose
 
-# Clone the OpenCTI Docker repository
-echo "Cloning the OpenCTI Docker repository..."
-mkdir -p "$INSTALL_DIR" && cd "$INSTALL_DIR"
-git clone https://github.com/OpenCTI-Platform/docker.git
-cd docker
+# Clone or update the OpenCTI Docker repository
+echo "Setting up the OpenCTI Docker repository..."
+mkdir -p "$INSTALL_DIR"
+cd "$INSTALL_DIR"
+
+if [ -d "docker" ]; then
+  if [ -d "docker/.git" ]; then
+    echo "Directory 'docker' exists and is a Git repository. Pulling latest changes..."
+    cd docker
+    git pull
+  else
+    echo "Directory 'docker' exists but is not a Git repository."
+    echo "Please move or delete the existing 'docker' directory and rerun the script."
+    exit 1
+  fi
+else
+  echo "Cloning the OpenCTI Docker repository..."
+  git clone https://github.com/OpenCTI-Platform/docker.git
+  cd docker
+fi
 
 # Generate .env file with default values
 echo "Generating .env file..."
@@ -62,17 +77,6 @@ if ! grep -q "depends_on:" docker-compose.yml; then
       - redis' docker-compose.yml
 fi
 
-# Ensure docker-compose.yml uses the default network for localhost
-echo "Ensuring docker-compose.yml uses the default network for localhost..."
-sed -i '/services:/a\
-  opencti:\n\
-    networks:\n\
-      - default' docker-compose.yml
-
-# Remove custom network configuration
-echo "Removing custom Docker network configuration..."
-sed -i '/networks:/,+2d' docker-compose.yml
-
 # Configure ElasticSearch system parameter
 echo "Configuring system parameters for ElasticSearch..."
 sudo sysctl -w vm.max_map_count=1048575
@@ -94,4 +98,28 @@ check_health() {
   local retries=10
   local healthy=0
 
-  for ((i=1; i<=retries; i
+  for ((i=1; i<=retries; i++)); do
+    unhealthy_count=$(docker ps --filter "health=unhealthy" --filter "name=opencti" --format "{{.ID}}" | wc -l)
+    healthy_count=$(docker ps --filter "health=healthy" --filter "name=opencti" --format "{{.ID}}" | wc -l)
+
+    if [[ $healthy_count -ge 1 && $unhealthy_count -eq 0 ]]; then
+      echo "All services are healthy!"
+      healthy=1
+      break
+    else
+      echo "Attempt $i/$retries: Some services are still unhealthy. Retrying in 15 seconds..."
+      sleep 15
+    fi
+  done
+
+  if [[ $healthy -eq 0 ]]; then
+    echo "Services failed to reach healthy state. Check container logs."
+    docker-compose logs opencti
+    exit 1
+  fi
+}
+
+# Run health checks
+check_health
+
+echo "OpenCTI setup completed successfully with IP localhost:8080!"
