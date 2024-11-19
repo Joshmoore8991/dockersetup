@@ -39,6 +39,27 @@ SMTP_HOSTNAME=localhost
 EOF
 ) > .env
 
+# Ensure Redis service is defined
+echo "Ensuring Redis service is defined in docker-compose.yml..."
+if ! grep -q "redis:" docker-compose.yml; then
+  sed -i '/services:/a\
+  redis:\
+    image: redis:6.2\
+    container_name: opencti_redis\
+    restart: unless-stopped\
+    healthcheck:\
+      test: [\"CMD\", \"redis-cli\", \"ping\"]\
+      interval: 10s\
+      timeout: 5s\
+      retries: 5' docker-compose.yml
+fi
+
+# Ensure OpenCTI depends on Redis
+echo "Ensuring OpenCTI depends on Redis in docker-compose.yml..."
+sed -i '/opencti:/a\
+    depends_on:\
+      - redis' docker-compose.yml
+
 # Ensure docker-compose.yml uses the default network for localhost
 echo "Ensuring docker-compose.yml uses the default network for localhost..."
 sed -i '/services:/a\
