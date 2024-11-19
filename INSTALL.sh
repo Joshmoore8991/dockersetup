@@ -8,30 +8,34 @@ INSTALL_DIR="$HOME/opencti"
 
 # Function to check and start Docker service
 ensure_docker_running() {
-  echo "Checking Docker service..."
+  echo "Checking Docker installation..."
   
+  # Check if Docker is installed
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker is not installed. Installing Docker..."
+    sudo apt update
+    sudo apt install -y docker.io
+  fi
+
+  # Check if Docker service is running
   if ! systemctl is-active --quiet docker; then
     echo "Docker service is not running. Starting Docker..."
     sudo systemctl start docker
     sudo systemctl enable docker
   fi
 
-  echo "Verifying Docker installation..."
-  if ! docker --version >/dev/null 2>&1; then
-    echo "Docker is not installed. Installing Docker..."
-    sudo apt update
-    sudo apt install -y docker.io
-  fi
-
-  if ! docker-compose --version >/dev/null 2>&1; then
+  echo "Verifying Docker Compose installation..."
+  # Check if Docker Compose is installed
+  if ! command -v docker-compose >/dev/null 2>&1; then
     echo "Docker Compose is not installed. Installing Docker Compose..."
     sudo apt install -y docker-compose
   fi
 
   echo "Ensuring user permissions for Docker..."
-  if ! groups $USER | grep -q "\bdocker\b"; then
+  # Ensure the user is part of the Docker group
+  if ! groups "$USER" | grep -q "\bdocker\b"; then
     echo "Adding user to the Docker group..."
-    sudo usermod -aG docker $USER
+    sudo usermod -aG docker "$USER"
     echo "Please log out and log back in, or run 'newgrp docker' to apply group changes."
     exit 1
   fi
