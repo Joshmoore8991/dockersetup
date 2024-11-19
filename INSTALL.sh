@@ -5,49 +5,55 @@ set -e
 
 # Define the installation directory
 INSTALL_DIR="$HOME/opencti"
+LOG_FILE="$INSTALL_DIR/setup_opencti.log"
+
+# Function to log messages
+log_message() {
+  echo "$(date "+%Y-%m-%d %H:%M:%S") - $1" | tee -a "$LOG_FILE"
+}
 
 # Function to check and start Docker service
 ensure_docker_running() {
-  echo "Checking Docker installation..."
+  log_message "Checking Docker installation..."
 
   # Check if Docker is installed
   if ! command -v docker >/dev/null 2>&1; then
-    echo "Docker is not installed. Installing Docker..."
-    sudo apt update
-    sudo apt install -y docker.io
+    log_message "Docker is not installed. Installing Docker..."
+    sudo apt update >>"$LOG_FILE" 2>&1
+    sudo apt install -y docker.io >>"$LOG_FILE" 2>&1
   fi
 
   # Check if Docker service is running
   if ! systemctl is-active --quiet docker; then
-    echo "Docker service is not running. Starting Docker..."
-    sudo systemctl start docker
-    sudo systemctl enable docker
+    log_message "Docker service is not running. Starting Docker..."
+    sudo systemctl start docker >>"$LOG_FILE" 2>&1
+    sudo systemctl enable docker >>"$LOG_FILE" 2>&1
   fi
 
-  echo "Verifying Docker Compose installation..."
+  log_message "Verifying Docker Compose installation..."
   # Check if Docker Compose is installed
   if ! command -v docker-compose >/dev/null 2>&1; then
-    echo "Docker Compose is not installed. Installing Docker Compose..."
-    sudo apt install -y docker-compose
+    log_message "Docker Compose is not installed. Installing Docker Compose..."
+    sudo apt install -y docker-compose >>"$LOG_FILE" 2>&1
   fi
 
-  echo "Ensuring user permissions for Docker..."
+  log_message "Ensuring user permissions for Docker..."
   # Ensure the user is part of the Docker group
   if ! groups "$USER" | grep -q "\bdocker\b"; then
-    echo "Adding user to the Docker group..."
+    log_message "Adding user to the Docker group..."
     sudo usermod -aG docker "$USER"
-    echo "Please log out and log back in, or run 'newgrp docker' to apply group changes."
+    log_message "Please log out and log back in, or run 'newgrp docker' to apply group changes."
     exit 1
   fi
 
   # Ensure Docker socket has the correct permissions
-  echo "Setting permissions for Docker socket..."
-  sudo chmod 666 /var/run/docker.sock
+  log_message "Setting permissions for Docker socket..."
+  sudo chmod 666 /var/run/docker.sock >>"$LOG_FILE" 2>&1
 
   # Test Docker connection
-  echo "Testing Docker connection..."
+  log_message "Testing Docker connection..."
   if ! docker info >/dev/null 2>&1; then
-    echo "Failed to connect to Docker daemon. Ensure Docker is running and accessible."
+    log_message "Failed to connect to Docker daemon. Ensure Docker is running and accessible."
     exit 1
   fi
 }
@@ -56,28 +62,28 @@ ensure_docker_running() {
 ensure_docker_running
 
 # Clone or update the OpenCTI Docker repository
-echo "Setting up the OpenCTI Docker repository..."
+log_message "Setting up the OpenCTI Docker repository..."
 mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 
 if [ -d "docker" ]; then
   if [ -d "docker/.git" ]; then
-    echo "Directory 'docker' exists and is a Git repository. Pulling latest changes..."
+    log_message "Directory 'docker' exists and is a Git repository. Pulling latest changes..."
     cd docker
-    git pull
+    git pull >>"$LOG_FILE" 2>&1
   else
-    echo "Directory 'docker' exists but is not a Git repository."
-    echo "Please move or delete the existing 'docker' directory and rerun the script."
+    log_message "Directory 'docker' exists but is not a Git repository."
+    log_message "Please move or delete the existing 'docker' directory and rerun the script."
     exit 1
   fi
 else
-  echo "Cloning the OpenCTI Docker repository..."
-  git clone https://github.com/OpenCTI-Platform/docker.git
+  log_message "Cloning the OpenCTI Docker repository..."
+  git clone https://github.com/OpenCTI-Platform/docker.git >>"$LOG_FILE" 2>&1
   cd docker
 fi
 
 # Generate .env file with default values
-echo "Generating .env file..."
+log_message "Generating .env file..."
 (cat << EOF
 OPENCTI_ADMIN_EMAIL=admin@opencti.io
 OPENCTI_ADMIN_PASSWORD=ChangeMePlease
@@ -99,7 +105,7 @@ EOF
 ) > .env
 
 # Ensure Redis service is defined
-echo "Ensuring Redis service is defined in docker-compose.yml..."
+log_message "Ensuring Redis service is defined in docker-compose.yml..."
 if ! grep -q "redis:" docker-compose.yml; then
   sed -i '/services:/a\
   redis:\n\
@@ -114,7 +120,7 @@ if ! grep -q "redis:" docker-compose.yml; then
 fi
 
 # Ensure OpenCTI depends on Redis
-echo "Ensuring OpenCTI depends on Redis in docker-compose.yml..."
+log_message "Ensuring OpenCTI depends on Redis in docker-compose.yml..."
 if ! grep -q "depends_on:" docker-compose.yml; then
   sed -i '/opencti:/a\
     depends_on:\n\
@@ -122,41 +128,41 @@ if ! grep -q "depends_on:" docker-compose.yml; then
 fi
 
 # Configure ElasticSearch system parameter
-echo "Configuring system parameters for ElasticSearch..."
-sudo sysctl -w vm.max_map_count=1048575
+log_message "Configuring system parameters for ElasticSearch..."
+sudo sysctl -w vm.max_map_count=1048575 >>"$LOG_FILE" 2>&1
 if ! grep -q "vm.max_map_count" /etc/sysctl.conf; then
-  echo "vm.max_map_count=1048575" | sudo tee -a /etc/sysctl.conf
+  echo "vm.max_map_count=1048575" | sudo tee -a /etc/sysctl.conf >>"$LOG_FILE" 2>&1
 fi
 
 # Run Docker Compose with logging to debug issues
-echo "Starting OpenCTI containers with logs..."
-docker-compose up --build --remove-orphans | tee docker-compose.log
+log_message "Starting OpenCTI containers with logs..."
+docker-compose up --build --remove-orphans | tee -a "$LOG_FILE"
 
 # Check if docker-compose failed and manually start containers if needed
 if [ $? -ne 0 ]; then
-  echo "docker-compose failed to start the containers. Checking for errors..."
-  tail -n 50 docker-compose.log
-  echo "Attempting to start containers manually for debugging..."
+  log_message "docker-compose failed to start the containers. Checking for errors..."
+  tail -n 50 "$LOG_FILE"  # Print the last 50 lines of the log
+
+  log_message "Attempting to start containers manually for debugging..."
 
   # Start Redis container manually
-  echo "Starting Redis container manually..."
-  docker run --name opencti_redis -d redis:6.2
+  log_message "Starting Redis container manually..."
+  docker run --name opencti_redis -d redis:6.2 >>"$LOG_FILE" 2>&1
 
   # Start OpenCTI container manually
-  echo "Starting OpenCTI container manually..."
-  docker run --name opencti -d -p 8080:8080 --link opencti_redis:redis opencti/opencti
+  log_message "Starting OpenCTI container manually..."
+  docker run --name opencti -d -p 8080:8080 --link opencti_redis:redis opencti/opencti >>"$LOG_FILE" 2>&1
 
-  echo "Check the containers manually to ensure they are working. You can use the following commands:"
-  echo "docker ps -a  # Check running containers"
-  echo "docker logs opencti_redis  # View Redis container logs"
-  echo "docker logs opencti  # View OpenCTI container logs"
+  log_message "Check the containers manually to ensure they are working. You can use the following commands:"
+  log_message "docker ps -a  # Check running containers"
+  log_message "docker logs opencti_redis  # View Redis container logs"
+  log_message "docker logs opencti  # View OpenCTI container logs"
 fi
 
 # Check the Docker Compose version to ensure compatibility
-echo "Checking Docker Compose version..."
+log_message "Checking Docker Compose version..."
 docker-compose --version
 
 # Inform user of the next steps
-echo "Check 'docker-compose.log' for detailed errors if the containers fail to start."
-echo "If the containers start manually, check the container logs for any specific issues."
-
+log_message "Check '$LOG_FILE' for detailed errors if the containers fail to start."
+log_message "If the containers start manually, check the container logs for any specific issues."
