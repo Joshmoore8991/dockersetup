@@ -105,8 +105,8 @@ if ! grep -q "redis:" docker-compose.yml; then
     healthcheck:\n\
       test: [\"CMD\", \"redis-cli\", \"ping\"]\n\
       interval: 10s\n\
-      timeout: 5s\n\
-      retries: 5\n' docker-compose.yml
+      retries: 5\n\
+      start_period: 5s\n' docker-compose.yml
 fi
 
 # Ensure OpenCTI depends on Redis
@@ -126,36 +126,4 @@ fi
 
 # Run Docker Compose
 echo "Starting OpenCTI containers..."
-docker-compose up -d
-
-# Health check function
-check_health() {
-  echo "Waiting for services to become healthy..."
-  local retries=10
-  local healthy=0
-
-  for ((i=1; i<=retries; i++)); do
-    unhealthy_count=$(docker ps --filter "health=unhealthy" --filter "name=opencti" --format "{{.ID}}" | wc -l)
-    healthy_count=$(docker ps --filter "health=healthy" --filter "name=opencti" --format "{{.ID}}" | wc -l)
-
-    if [[ $healthy_count -ge 1 && $unhealthy_count -eq 0 ]]; then
-      echo "All services are healthy!"
-      healthy=1
-      break
-    else
-      echo "Attempt $i/$retries: Some services are still unhealthy. Retrying in 15 seconds..."
-      sleep 15
-    fi
-  done
-
-  if [[ $healthy -eq 0 ]]; then
-    echo "Services failed to reach healthy state. Check container logs."
-    docker-compose logs opencti
-    exit 1
-  fi
-}
-
-# Run health checks
-check_health
-
-echo "OpenCTI setup completed successfully with IP localhost:8080!"
+docker-compose up
