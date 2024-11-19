@@ -107,7 +107,7 @@ if ! grep -q "redis:" docker-compose.yml; then
     container_name: opencti_redis\n\
     restart: unless-stopped\n\
     healthcheck:\n\
-      test: [\"CMD\", \"redis-cli\", \"ping\"]\n\
+      test: ["CMD", "redis-cli", "ping"]\n\
       interval: 10s\n\
       retries: 5\n\
       start_period: 5s\n' docker-compose.yml
