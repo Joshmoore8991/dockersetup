@@ -132,5 +132,31 @@ fi
 echo "Starting OpenCTI containers with logs..."
 docker-compose up --build --remove-orphans | tee docker-compose.log
 
-# Check the log file after execution for any errors
+# Check if docker-compose failed and manually start containers if needed
+if [ $? -ne 0 ]; then
+  echo "docker-compose failed to start the containers. Checking for errors..."
+  tail -n 50 docker-compose.log
+  echo "Attempting to start containers manually for debugging..."
+
+  # Start Redis container manually
+  echo "Starting Redis container manually..."
+  docker run --name opencti_redis -d redis:6.2
+
+  # Start OpenCTI container manually
+  echo "Starting OpenCTI container manually..."
+  docker run --name opencti -d -p 8080:8080 --link opencti_redis:redis opencti/opencti
+
+  echo "Check the containers manually to ensure they are working. You can use the following commands:"
+  echo "docker ps -a  # Check running containers"
+  echo "docker logs opencti_redis  # View Redis container logs"
+  echo "docker logs opencti  # View OpenCTI container logs"
+fi
+
+# Check the Docker Compose version to ensure compatibility
+echo "Checking Docker Compose version..."
+docker-compose --version
+
+# Inform user of the next steps
 echo "Check 'docker-compose.log' for detailed errors if the containers fail to start."
+echo "If the containers start manually, check the container logs for any specific issues."
+
