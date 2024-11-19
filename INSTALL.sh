@@ -7,9 +7,41 @@ set -e
 INSTALL_DIR="$HOME/opencti"
 LOG_FILE="$INSTALL_DIR/setup_opencti.log"
 
+# Docker Compose version check and update
+DOCKER_COMPOSE_LATEST_VERSION="1.29.2"  # Set this to the latest stable version if different
+DOCKER_COMPOSE_BIN="/usr/local/bin/docker-compose"
+
 # Function to log messages
 log_message() {
   echo "$(date "+%Y-%m-%d %H:%M:%S") - $1" | tee -a "$LOG_FILE"
+}
+
+# Function to check and update Docker Compose
+ensure_docker_compose() {
+  log_message "Checking Docker Compose version..."
+
+  # Get installed version of Docker Compose
+  CURRENT_VERSION=$(docker-compose --version 2>/dev/null | awk '{print $3}' | sed 's/,//')
+
+  if [ $? -ne 0 ]; then
+    log_message "Docker Compose is not installed. Installing Docker Compose..."
+    CURRENT_VERSION=""
+  fi
+
+  # Compare installed version with the latest version
+  if [ "$CURRENT_VERSION" != "$DOCKER_COMPOSE_LATEST_VERSION" ]; then
+    log_message "Docker Compose version is outdated or not installed. Installing/upgrading to version $DOCKER_COMPOSE_LATEST_VERSION..."
+
+    # Install the latest version of Docker Compose
+    sudo curl -L "https://github.com/docker/compose/releases/download/$DOCKER_COMPOSE_LATEST_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o "$DOCKER_COMPOSE_BIN"
+    sudo chmod +x "$DOCKER_COMPOSE_BIN"
+    log_message "Docker Compose has been installed/upgraded to version $DOCKER_COMPOSE_LATEST_VERSION."
+  else
+    log_message "Docker Compose is already up to date (version $CURRENT_VERSION)."
+  fi
+
+  # Verify Docker Compose installation
+  docker-compose --version
 }
 
 # Function to check and start Docker service
@@ -57,6 +89,9 @@ ensure_docker_running() {
     exit 1
   fi
 }
+
+# Call the Docker Compose version check function
+ensure_docker_compose
 
 # Call the Docker setup function
 ensure_docker_running
