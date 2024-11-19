@@ -6,10 +6,50 @@ set -e
 # Define the installation directory
 INSTALL_DIR="$HOME/opencti"
 
-# Install dependencies
-echo "Installing dependencies..."
-sudo apt update
-sudo apt install -y git jq docker.io docker-compose
+# Function to check and start Docker service
+ensure_docker_running() {
+  echo "Checking Docker service..."
+  
+  if ! systemctl is-active --quiet docker; then
+    echo "Docker service is not running. Starting Docker..."
+    sudo systemctl start docker
+    sudo systemctl enable docker
+  fi
+
+  echo "Verifying Docker installation..."
+  if ! docker --version >/dev/null 2>&1; then
+    echo "Docker is not installed. Installing Docker..."
+    sudo apt update
+    sudo apt install -y docker.io
+  fi
+
+  if ! docker-compose --version >/dev/null 2>&1; then
+    echo "Docker Compose is not installed. Installing Docker Compose..."
+    sudo apt install -y docker-compose
+  fi
+
+  echo "Ensuring user permissions for Docker..."
+  if ! groups $USER | grep -q "\bdocker\b"; then
+    echo "Adding user to the Docker group..."
+    sudo usermod -aG docker $USER
+    echo "Please log out and log back in, or run 'newgrp docker' to apply group changes."
+    exit 1
+  fi
+
+  # Ensure Docker socket has the correct permissions
+  echo "Setting permissions for Docker socket..."
+  sudo chmod 666 /var/run/docker.sock
+
+  # Test Docker connection
+  echo "Testing Docker connection..."
+  if ! docker info >/dev/null 2>&1; then
+    echo "Failed to connect to Docker daemon. Ensure Docker is running and accessible."
+    exit 1
+  fi
+}
+
+# Call the Docker setup function
+ensure_docker_running
 
 # Clone or update the OpenCTI Docker repository
 echo "Setting up the OpenCTI Docker repository..."
@@ -84,11 +124,7 @@ if ! grep -q "vm.max_map_count" /etc/sysctl.conf; then
   echo "vm.max_map_count=1048575" | sudo tee -a /etc/sysctl.conf
 fi
 
-# Start Docker service
-echo "Starting Docker service..."
-sudo systemctl start docker.service
-
-# Run Docker Compose and wait for services to stabilize
+# Run Docker Compose
 echo "Starting OpenCTI containers..."
 docker-compose up -d
 
