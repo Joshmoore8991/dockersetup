@@ -128,6 +128,9 @@ if ! grep -q "vm.max_map_count" /etc/sysctl.conf; then
   echo "vm.max_map_count=1048575" | sudo tee -a /etc/sysctl.conf
 fi
 
-# Run Docker Compose
-echo "Starting OpenCTI containers..."
-docker-compose up
+# Run Docker Compose with logging to debug issues
+echo "Starting OpenCTI containers with logs..."
+docker-compose up --build --remove-orphans | tee docker-compose.log
+
+# Check the log file after execution for any errors
+echo "Check 'docker-compose.log' for detailed errors if the containers fail to start."
