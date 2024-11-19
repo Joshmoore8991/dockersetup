@@ -139,24 +139,27 @@ SMTP_HOSTNAME=localhost
 EOF
 ) > .env
 
-# Ensure Redis service is defined
+# Ensure Redis service is defined correctly
 log_message "Ensuring Redis service is defined in docker-compose.yml..."
 if ! grep -q "redis:" docker-compose.yml; then
-  sed -i '/services:/a\
-  redis:\n\
-    image: redis:6.2\n\
-    container_name: opencti_redis\n\
-    restart: unless-stopped\n\
-    healthcheck:\n\
-      test: ["CMD", "redis-cli", "ping"]\n\
-      interval: 10s\n\
-      retries: 5\n\
-      start_period: 5s\n' docker-compose.yml
+  log_message "Adding Redis service to docker-compose.yml..."
+  cat << EOF >> docker-compose.yml
+  redis:
+    image: redis:6.2
+    container_name: opencti_redis
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+EOF
 fi
 
 # Ensure OpenCTI depends on Redis
 log_message "Ensuring OpenCTI depends on Redis in docker-compose.yml..."
 if ! grep -q "depends_on:" docker-compose.yml; then
+  log_message "Adding depends_on for OpenCTI..."
   sed -i '/opencti:/a\
     depends_on:\n\
       - redis' docker-compose.yml
@@ -169,8 +172,9 @@ if ! grep -q "vm.max_map_count" /etc/sysctl.conf; then
   echo "vm.max_map_count=1048575" | sudo tee -a /etc/sysctl.conf >>"$LOG_FILE" 2>&1
 fi
 
-# Run Docker Compose with logging to debug issues
-log_message "Starting OpenCTI containers with logs..."
+# Run Docker Compose build and up with logging to debug issues
+log_message "Building and starting OpenCTI containers with logs..."
+docker-compose build --no-cache | tee -a "$LOG_FILE"
 docker-compose up --build --remove-orphans | tee -a "$LOG_FILE"
 
 # Check if docker-compose failed and manually start containers if needed
@@ -181,23 +185,4 @@ if [ $? -ne 0 ]; then
   log_message "Attempting to start containers manually for debugging..."
 
   # Start Redis container manually
-  log_message "Starting Redis container manually..."
-  docker run --name opencti_redis -d redis:6.2 >>"$LOG_FILE" 2>&1
-
-  # Start OpenCTI container manually
-  log_message "Starting OpenCTI container manually..."
-  docker run --name opencti -d -p 8080:8080 --link opencti_redis:redis opencti/opencti >>"$LOG_FILE" 2>&1
-
-  log_message "Check the containers manually to ensure they are working. You can use the following commands:"
-  log_message "docker ps -a  # Check running containers"
-  log_message "docker logs opencti_redis  # View Redis container logs"
-  log_message "docker logs opencti  # View OpenCTI container logs"
-fi
-
-# Check the Docker Compose version to ensure compatibility
-log_message "Checking Docker Compose version..."
-docker-compose --version
-
-# Inform user of the next steps
-log_message "Check '$LOG_FILE' for detailed errors if the containers fail to start."
-log_message "If the containers start manually, check the container logs for any specific issues."
+  log_message "Starting Redis
