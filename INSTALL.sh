@@ -43,28 +43,30 @@ EOF
 echo "Ensuring Redis service is defined in docker-compose.yml..."
 if ! grep -q "redis:" docker-compose.yml; then
   sed -i '/services:/a\
-  redis:\
-    image: redis:6.2\
-    container_name: opencti_redis\
-    restart: unless-stopped\
-    healthcheck:\
-      test: [\"CMD\", \"redis-cli\", \"ping\"]\
-      interval: 10s\
-      timeout: 5s\
-      retries: 5' docker-compose.yml
+  redis:\n\
+    image: redis:6.2\n\
+    container_name: opencti_redis\n\
+    restart: unless-stopped\n\
+    healthcheck:\n\
+      test: [\"CMD\", \"redis-cli\", \"ping\"]\n\
+      interval: 10s\n\
+      timeout: 5s\n\
+      retries: 5\n' docker-compose.yml
 fi
 
 # Ensure OpenCTI depends on Redis
 echo "Ensuring OpenCTI depends on Redis in docker-compose.yml..."
-sed -i '/opencti:/a\
-    depends_on:\
+if ! grep -q "depends_on:" docker-compose.yml; then
+  sed -i '/opencti:/a\
+    depends_on:\n\
       - redis' docker-compose.yml
+fi
 
 # Ensure docker-compose.yml uses the default network for localhost
 echo "Ensuring docker-compose.yml uses the default network for localhost..."
 sed -i '/services:/a\
-  opencti:\
-    networks:\
+  opencti:\n\
+    networks:\n\
       - default' docker-compose.yml
 
 # Remove custom network configuration
@@ -92,28 +94,4 @@ check_health() {
   local retries=10
   local healthy=0
 
-  for ((i=1; i<=retries; i++)); do
-    unhealthy_count=$(docker ps --filter "health=unhealthy" --filter "name=opencti" --format "{{.ID}}" | wc -l)
-    healthy_count=$(docker ps --filter "health=healthy" --filter "name=opencti" --format "{{.ID}}" | wc -l)
-
-    if [[ $healthy_count -ge 1 && $unhealthy_count -eq 0 ]]; then
-      echo "All services are healthy!"
-      healthy=1
-      break
-    else
-      echo "Attempt $i/$retries: Some services are still unhealthy. Retrying in 15 seconds..."
-      sleep 15
-    fi
-  done
-
-  if [[ $healthy -eq 0 ]]; then
-    echo "Services failed to reach healthy state. Check container logs."
-    docker-compose logs opencti
-    exit 1
-  fi
-}
-
-# Run health checks
-check_health
-
-echo "OpenCTI setup completed successfully with IP localhost:8080!"
+  for ((i=1; i<=retries; i
